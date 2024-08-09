@@ -1,0 +1,38 @@
+name: Manage Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform (save/load)'
+        required: true
+        default: 'load'
+      data:
+        description: 'Data to save (JSON string)'
+        required: false
+
+jobs:
+  manage-data:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Load or Save Data
+      id: data
+      run: |
+        if [ "${{ github.event.inputs.action }}" == "save" ]; then
+          echo "${{ github.event.inputs.data }}" > data.json
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git add data.json
+          git commit -m "Update data.json via GitHub Action"
+          git push
+        elif [ "${{ github.event.inputs.action }}" == "load" ]; then
+          echo "::set-output name=data::$(cat data.json)"
+        fi
+
+    outputs:
+      data: ${{ steps.data.outputs.data }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
