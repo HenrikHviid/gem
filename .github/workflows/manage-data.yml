@@ -35,5 +35,5 @@ jobs:
     outputs:
       data: ${{ steps.data.outputs.data }}
     env:
-      TOKEN: ${{ secrets.TOKEN }}
-      REPO_NAME: ${{ secrets.REPO_NAME }}
+      GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      GITHUB_REPOSITORY: ${{ secrets.REPO_NAME }}
