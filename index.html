@@ -206,10 +206,26 @@
             });
 
             if (response.ok) {
-                const jsonResponse = await response.json();
-                data = JSON.parse(jsonResponse.outputs.data);
-                renderData();
-                updateHeadingSelect();
+                const workflowResponse = await response.json();
+                const runId = workflowResponse.workflow_runs[0].id;
+
+                const resultResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${runId}/logs`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+
+                if (resultResponse.ok) {
+                    const logs = await resultResponse.text();
+                    const match = logs.match(/::set-output name=data::(.*)/);
+                    if (match) {
+                        data = JSON.parse(decodeURIComponent(match[1]));
+                        renderData();
+                        updateHeadingSelect();
+                    }
+                }
             } else {
                 console.error('Fejl ved hentning af data fra GitHub:', response.statusText);
             }
