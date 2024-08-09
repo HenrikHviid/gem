@@ -10,36 +10,54 @@
         ul { list-style-type: none; padding: 0; }
         li { cursor: pointer; padding: 5px; border: 1px solid #ddd; margin: 2px 0; }
         h2 { cursor: pointer; }
+        .hidden { display: none; }
+        .heading-controls { display: flex; align-items: center; }
+        .heading-controls button { margin-left: 5px; }
     </style>
 </head>
 <body>
     <h1>Data Manager</h1>
 
     <div>
+        <input id="heading-name" placeholder="Ny overskrift" type="text">
+        <button onclick="addHeading()">Tilføj Overskrift</button>
+    </div>
+
+    <div>
         <input id="element-name" placeholder="Navn" type="text">
         <input id="element-value" placeholder="Værdi" type="text">
+        <select id="heading-select"></select>
         <button onclick="addElement()">Tilføj Element</button>
     </div>
 
     <div id="headings-container"></div>
 
     <script>
-        const GITHUB_USERNAME = 'DIT_GITHUB_BRUGERNAVN'; // Udskift med dit GitHub-brugernavn
-        const REPO_NAME = 'gem';
-
         let data = {};
 
-        async function addElement() {
+        function addHeading() {
+            const headingName = document.getElementById('heading-name').value;
+            if (headingName && !data[headingName]) {
+                data[headingName] = [];
+                renderData();
+                document.getElementById('heading-name').value = '';
+                updateHeadingSelect();
+                saveDataToGitHubAction();
+            }
+        }
+
+        function addElement() {
             const name = document.getElementById('element-name').value;
             const value = document.getElementById('element-value').value;
+            const heading = document.getElementById('heading-select').value;
 
-            if (!data["Uncategorized"]) {
-                data["Uncategorized"] = [];
+            if (heading && name && value) {
+                data[heading].push({ name, value });
+                renderData();
+                document.getElementById('element-name').value = '';
+                document.getElementById('element-value').value = '';
+                saveDataToGitHubAction();
             }
-            data["Uncategorized"].push({ name, value });
-
-            renderData();
-            await saveDataToGitHubAction();
         }
 
         function renderData() {
@@ -48,23 +66,43 @@
 
             for (const [heading, elements] of Object.entries(data)) {
                 const headingElement = document.createElement('div');
-                headingElement.innerHTML = `<h2 onclick="toggleVisibility('${heading}')">${heading}</h2>`;
-                
+                headingElement.className = 'heading-controls';
+                headingElement.innerHTML = `
+                    <h2 onclick="toggleVisibility('${heading}')">${heading}</h2>
+                    <button onclick="moveHeading('${heading}', -1)">Op</button>
+                    <button onclick="moveHeading('${heading}', 1)">Ned</button>
+                    <button onclick="deleteHeading('${heading}')">Slet</button>
+                `;
+
                 const list = document.createElement('ul');
+                list.id = `list-${heading}`;
                 elements.forEach((element, index) => {
                     const listItem = document.createElement('li');
                     listItem.textContent = `${element.name}: ${element.value}`;
                     listItem.onclick = () => copyToClipboard(element.value);
                     list.appendChild(listItem);
                 });
+
                 headingElement.appendChild(list);
                 container.appendChild(headingElement);
             }
         }
 
+        function updateHeadingSelect() {
+            const select = document.getElementById('heading-select');
+            select.innerHTML = '';
+
+            for (const heading of Object.keys(data)) {
+                const option = document.createElement('option');
+                option.value = heading;
+                option.textContent = heading;
+                select.appendChild(option);
+            }
+        }
+
         function toggleVisibility(heading) {
-            const elements = document.querySelector(`h2:contains(${heading})`).nextElementSibling;
-            elements.style.display = elements.style.display === 'none' ? 'block' : 'none';
+            const list = document.getElementById(`list-${heading}`);
+            list.classList.toggle('hidden');
         }
 
         function copyToClipboard(text) {
@@ -73,11 +111,37 @@
             });
         }
 
+        function moveHeading(heading, direction) {
+            const keys = Object.keys(data);
+            const index = keys.indexOf(heading);
+            if (index >= 0 && ((direction === -1 && index > 0) || (direction === 1 && index < keys.length - 1))) {
+                const newIndex = index + direction;
+                const reorderedData = {};
+                keys.splice(index, 1);
+                keys.splice(newIndex, 0, heading);
+                keys.forEach(key => {
+                    reorderedData[key] = data[key];
+                });
+                data = reorderedData;
+                renderData();
+                saveDataToGitHubAction();
+            }
+        }
+
+        function deleteHeading(heading) {
+            if (confirm(`Er du sikker på, at du vil slette overskriften "${heading}" og alle dens elementer?`)) {
+                delete data[heading];
+                renderData();
+                updateHeadingSelect();
+                saveDataToGitHubAction();
+            }
+        }
+
         async function saveDataToGitHubAction() {
-            const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/actions/workflows/manage-data.yml/dispatches`, {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/manage-data.yml/dispatches`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${YOUR_GITHUB_TOKEN}`, // Du kan gemme din token her eller bruge en mere sikker metode
+                    'Authorization': `Bearer ${GITHUB_TOKEN}`,
                     'Accept': 'application/vnd.github.v3+json'
                 },
                 body: JSON.stringify({
@@ -95,10 +159,10 @@
         }
 
         async function loadDataFromGitHubAction() {
-            const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/actions/workflows/manage-data.yml/dispatches`, {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/manage-data.yml/dispatches`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${YOUR_GITHUB_TOKEN}`, // Du kan gemme din token her eller bruge en mere sikker metode
+                    'Authorization': `Bearer ${GITHUB_TOKEN}`,
                     'Accept': 'application/vnd.github.v3+json'
                 },
                 body: JSON.stringify({
@@ -113,6 +177,7 @@
                 const jsonResponse = await response.json();
                 data = JSON.parse(jsonResponse.outputs.data);
                 renderData();
+                updateHeadingSelect();
             } else {
                 console.error('Fejl ved hentning af data fra GitHub:', response.statusText);
             }
