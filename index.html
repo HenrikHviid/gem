@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Data Manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        input, button { margin: 5px 0; }
+        ul { list-style-type: none; padding: 0; }
+        li { cursor: pointer; padding: 5px; border: 1px solid #ddd; margin: 2px 0; }
+        h2 { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Data Manager</h1>
+
+    <div>
+        <input id="element-name" placeholder="Navn" type="text">
+        <input id="element-value" placeholder="Værdi" type="text">
+        <button onclick="addElement()">Tilføj Element</button>
+    </div>
+
+    <div id="headings-container"></div>
+
+    <script>
+        const GITHUB_USERNAME = 'DIT_GITHUB_BRUGERNAVN'; // Udskift med dit GitHub-brugernavn
+        const REPO_NAME = 'gem';
+        const TOKEN = 'DIN_TOKEN'; // Din token skal indsættes her
+
+        let data = {};
+
+        async function addElement() {
+            const name = document.getElementById('element-name').value;
+            const value = document.getElementById('element-value').value;
+
+            if (!data["Uncategorized"]) {
+                data["Uncategorized"] = [];
+            }
+            data["Uncategorized"].push({ name, value });
+
+            renderData();
+            await saveDataToGitHubAction();
+        }
+
+        function renderData() {
+            const container = document.getElementById('headings-container');
+            container.innerHTML = '';
+
+            for (const [heading, elements] of Object.entries(data)) {
+                const headingElement = document.createElement('div');
+                headingElement.innerHTML = `<h2 onclick="toggleVisibility('${heading}')">${heading}</h2>`;
+                
+                const list = document.createElement('ul');
+                elements.forEach((element, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `${element.name}: ${element.value}`;
+                    listItem.onclick = () => copyToClipboard(element.value);
+                    list.appendChild(listItem);
+                });
+                headingElement.appendChild(list);
+                container.appendChild(headingElement);
+            }
+        }
+
+        function toggleVisibility(heading) {
+            const elements = document.querySelector(`h2:contains(${heading})`).nextElementSibling;
+            elements.style.display = elements.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Kopieret til udklipsholderen!');
+            });
+        }
+
+        async function saveDataToGitHubAction() {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/actions/workflows/manage-data.yml/dispatches`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    ref: 'main',
+                    inputs: {
+                        action: 'save',
+                        data: JSON.stringify(data)
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                console.error('Fejl ved lagring af data til GitHub:', response.statusText);
+            }
+        }
+
+        async function loadDataFromGitHubAction() {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/actions/workflows/manage-data.yml/dispatches`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    ref: 'main',
+                    inputs: {
+                        action: 'load'
+                    }
+                })
+            });
+
+            if (response.ok) {
+                const jsonResponse = await response.json();
+                data = JSON.parse(jsonResponse.outputs.data);
+                renderData();
+            } else {
+                console.error('Fejl ved hentning af data fra GitHub:', response.statusText);
+            }
+        }
+
+        // Indlæs eksisterende data ved opstart
+        loadDataFromGitHubAction();
+    </script>
+</body>
+</html>
