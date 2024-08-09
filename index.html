@@ -13,6 +13,7 @@
         .hidden { display: none; }
         .heading-controls { display: flex; align-items: center; }
         .heading-controls button { margin-left: 5px; }
+        .move-button { margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -64,28 +65,33 @@
             const container = document.getElementById('headings-container');
             container.innerHTML = '';
 
-            for (const [heading, elements] of Object.entries(data)) {
+            Object.keys(data).forEach((heading, headingIndex) => {
                 const headingElement = document.createElement('div');
                 headingElement.className = 'heading-controls';
                 headingElement.innerHTML = `
                     <h2 onclick="toggleVisibility('${heading}')">${heading}</h2>
-                    <button onclick="moveHeading('${heading}', -1)">Op</button>
-                    <button onclick="moveHeading('${heading}', 1)">Ned</button>
+                    <button class="move-button" onclick="moveHeading('${heading}', -1)">Op</button>
+                    <button class="move-button" onclick="moveHeading('${heading}', 1)">Ned</button>
                     <button onclick="deleteHeading('${heading}')">Slet</button>
                 `;
 
                 const list = document.createElement('ul');
                 list.id = `list-${heading}`;
-                elements.forEach((element, index) => {
+                list.setAttribute('data-heading', heading);
+
+                data[heading].forEach((element, index) => {
                     const listItem = document.createElement('li');
                     listItem.textContent = `${element.name}: ${element.value}`;
-                    listItem.onclick = () => copyToClipboard(element.value);
+                    listItem.setAttribute('draggable', true);
+                    listItem.addEventListener('dragstart', dragStart);
+                    listItem.addEventListener('dragover', dragOver);
+                    listItem.addEventListener('drop', dropElement);
                     list.appendChild(listItem);
                 });
 
                 headingElement.appendChild(list);
                 container.appendChild(headingElement);
-            }
+            });
         }
 
         function updateHeadingSelect() {
@@ -134,6 +140,32 @@
                 renderData();
                 updateHeadingSelect();
                 saveDataToGitHubAction();
+            }
+        }
+
+        function dragStart(event) {
+            event.dataTransfer.setData('text/plain', event.target.textContent);
+            event.dataTransfer.setData('heading', event.target.parentNode.getAttribute('data-heading'));
+        }
+
+        function dragOver(event) {
+            event.preventDefault();
+        }
+
+        function dropElement(event) {
+            event.preventDefault();
+            const fromHeading = event.dataTransfer.getData('heading');
+            const fromText = event.dataTransfer.getData('text/plain');
+            const toHeading = this.parentNode.getAttribute('data-heading');
+
+            if (fromHeading !== toHeading) {
+                const elementIndex = data[fromHeading].findIndex(el => `${el.name}: ${el.value}` === fromText);
+                if (elementIndex >= 0) {
+                    const element = data[fromHeading].splice(elementIndex, 1)[0];
+                    data[toHeading].push(element);
+                    renderData();
+                    saveDataToGitHubAction();
+                }
             }
         }
 
